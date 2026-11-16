@@ -1,0 +1,83 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>즐겨찾기 · Design Field Notes</title><style id="design-favorites-style">.favorites-nav{display:flex;flex-wrap:wrap;gap:20px;margin:18px 0}.favorite-toggle{margin:16px 0;border:1px solid currentColor;padding:10px 15px;background:transparent;color:inherit;font:inherit;cursor:pointer}.favorite-toggle[aria-pressed=true]{background:#ee3924;color:white;border-color:#ee3924}.favorite-toggle:focus-visible,.favorites-page a:focus-visible,.favorites-page input:focus-visible{outline:3px solid #ee3924;outline-offset:4px}.favorites-status{font-size:14px;overflow-wrap:anywhere}.favorites-page{margin:0;background:#f2f0e8;color:#181818;font:16px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",sans-serif}.favorites-page main{max-width:950px;margin:auto;padding:36px}.favorites-page h1{font-size:clamp(36px,7vw,64px);line-height:1.1}.favorites-page a{color:inherit;overflow-wrap:anywhere}.favorites-page input{box-sizing:border-box;max-width:100%;width:100%;padding:14px;background:transparent;border:1px solid #181818;font:inherit}.saved-card{background:white;padding:28px;margin:20px 0;border-top:3px solid #ee3924;overflow-wrap:anywhere}.saved-card h2{margin-top:0}.saved-links{display:flex;gap:20px;flex-wrap:wrap}.favorites-note{border-top:1px solid #181818;padding-top:20px}.favorites-page [hidden]{display:none!important}@media(max-width:640px){.favorites-page main{padding:22px}.saved-card{padding:22px}}@media print{.favorite-toggle,.favorites-nav,.favorites-page input{display:none}}</style></head><body class="favorites-page"><main><nav class="favorites-nav"><a href="https://gyungsublee.github.io/design-ui-daily-reports/">← 보고서 목록</a><a href="https://gyungsublee.github.io/design-ui-daily-reports/latest.html">최신 보고서</a></nav><header><p>DESIGN FIELD NOTES / SAVED SITES</p><h1>저장한 사이트</h1><p class="favorites-note">즐겨찾기는 이 브라우저에만 저장됩니다. 서버 전송이나 기기 간 동기화는 없습니다. 브라우저 데이터 삭제·시크릿 모드 종료 시 사라질 수 있습니다.</p></header><label for="favorites-search">사이트 이름·주소·출처·날짜 검색</label><input id="favorites-search" type="search" placeholder="저장한 사이트 검색"><p id="favorites-count" aria-live="polite"></p><p id="favorites-status" class="favorites-status" role="status" aria-live="polite"></p><section id="favorites-list" aria-label="저장한 사이트 목록"></section><noscript>즐겨찾기를 사용하려면 JavaScript를 켜 주세요. 저장 데이터는 이 브라우저에만 보관됩니다.</noscript></main><script id="design-favorites-config" type="application/json">{}</script><script id="design-favorites-script">(() => {
+'use strict';
+const KEY = 'design-field-notes:favorites:v1';
+const VERSION = 1;
+const config = JSON.parse(document.getElementById('design-favorites-config').textContent);
+const list = document.getElementById('favorites-list');
+const search = document.getElementById('favorites-search');
+const status = document.getElementById('favorites-status');
+let items = [], readable = true;
+const bindings = [];
+function url(value) {
+  try { const u = new URL(value); if (!['https:', 'http:'].includes(u.protocol) || u.username || u.password) return null; u.hash = ''; return u.href; } catch (_) { return null; }
+}
+function clean(value) {
+  if (!value || typeof value !== 'object') return null;
+  const website_url = url(value.website_url), source_url = url(value.source_url), report_url = url(value.report_url);
+  if (!website_url || !source_url || !report_url) return null;
+  return {website_url, source_url, report_url, title:String(value.title || website_url), source:String(value.source || '출처'), date:String(value.date || ''), report_date:String(value.report_date || '')};
+}
+function read() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    const saved = raw === null ? {version:VERSION, items:[]} : JSON.parse(raw);
+    if (!saved || saved.version !== VERSION || !Array.isArray(saved.items)) throw new Error('Unsupported favorites data');
+    const unique = new Map();
+    for (const value of saved.items) { const item = clean(value); if (!item) throw new Error('Invalid favorite'); unique.set(item.website_url,item); }
+    items = Array.from(unique.values()); readable = true; return true;
+  } catch (_) { readable = false; status.textContent = '저장 목록을 읽을 수 없습니다. 브라우저 저장소 설정 또는 저장 데이터를 확인하세요. 저장 내용은 변경하지 않았습니다.'; return false; }
+}
+function write(next) {
+  try { localStorage.setItem(KEY, JSON.stringify({version:VERSION, items:next})); items = next; return true; }
+  catch (_) { status.textContent = '저장하지 못했습니다. 브라우저 저장소 차단 또는 용량을 확인하세요. 변경 사항은 저장되지 않았습니다.'; return false; }
+}
+function node(tag, text, parent) { const el = document.createElement(tag); el.textContent = text; if (parent) parent.append(el); return el; }
+function remove(website) {
+  if (!read()) return;
+  if (write(items.filter(x => x.website_url !== website))) { status.textContent = '즐겨찾기에서 삭제했습니다.'; render(); }
+}
+function render() {
+  for (const {button,item} of bindings) {
+    const saved = items.some(x => x.website_url === item.website_url);
+    button.disabled = !readable;
+    button.setAttribute('aria-pressed',String(saved));
+    button.textContent = saved ? '♥ 저장됨 · 해제' : '♡ 즐겨찾기 저장';
+    button.setAttribute('aria-label',item.title + (saved ? ' 즐겨찾기 해제' : ' 즐겨찾기 저장'));
+  }
+  if (!list) return;
+  list.replaceChildren();
+  if (!readable) return;
+  const query = search.value.toLocaleLowerCase().trim();
+  const visible = items.filter(x => [x.title,x.website_url,x.source,x.date,x.report_date].join(' ').toLocaleLowerCase().includes(query));
+  document.getElementById('favorites-count').textContent = `저장 ${items.length}개 · 표시 ${visible.length}개`;
+  if (!visible.length) { node('p',items.length ? '검색 결과가 없습니다.' : '저장한 사이트가 없습니다. 보고서에서 즐겨찾기 버튼을 눌러 보세요.',list); return; }
+  for (const item of visible) {
+    const card = document.createElement('article'); card.className = 'saved-card'; list.append(card);
+    node('h2',item.title,card); node('p',`${item.source} · 출처 날짜 ${item.date || '불명'} · 보고서 ${item.report_date || '불명'}`,card);
+    const links = document.createElement('div'); links.className = 'saved-links'; card.append(links);
+    for (const [label,href] of [['실제 사이트 ↗',item.website_url],['출처 원문 ↗',item.source_url],['저장한 보고서 ↗',item.report_url]]) {
+      const a = node('a',label,links); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    }
+    node('p',item.website_url,card);
+    const button = node('button','즐겨찾기 삭제',card); button.type = 'button'; button.className = 'favorite-toggle'; button.setAttribute('aria-label',item.title+' 즐겨찾기 삭제'); button.addEventListener('click',() => remove(item.website_url));
+  }
+}
+for (const card of document.querySelectorAll('article.card')) {
+  const visit = card.querySelector('.visit-link');
+  const source = card.querySelector('.reference-links a:not(.visit-link)');
+  const heading = card.querySelector('h2');
+  const item = clean({title:heading ? heading.textContent.trim() : '', website_url:visit && visit.getAttribute('href'), source_url:source && source.getAttribute('href'), source:source ? source.textContent.replace(/\s*원문.*$/,'').trim() : '', date:card.getAttribute('data-date') || '', report_url:config.report_url, report_date:config.report_date});
+  const button = document.createElement('button'); button.type = 'button'; button.className = 'favorite-toggle';
+  if (!item) { button.textContent = '실제 사이트 주소 미확인 · 저장 불가'; button.disabled = true; card.append(button); continue; }
+  bindings.push({button,item}); card.append(button);
+  button.addEventListener('click',() => {
+    if (!read()) { render(); return; }
+    const exists = items.some(x => x.website_url === item.website_url);
+    const next = exists ? items.filter(x => x.website_url !== item.website_url) : [...items,item];
+    if (write(next)) { status.textContent = exists ? '즐겨찾기에서 삭제했습니다.' : '이 브라우저에 저장했습니다.'; render(); }
+  });
+}
+if (search) search.addEventListener('input',render);
+window.addEventListener('storage',event => { if (event.key === KEY || event.key === null) { status.textContent = ''; read(); render(); } });
+read(); render();
+})();</script></body></html>

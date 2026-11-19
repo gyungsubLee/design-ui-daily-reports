@@ -114,8 +114,8 @@ async function request(path, options = {}, token = null) {
       ...(token ? {Authorization:'Bearer '+token} : {}), ...(options.headers || {})}, cache:'no-store', referrerPolicy:'no-referrer'
   });
   if (!response.ok) throw new Error('HTTP '+response.status);
-  if (response.status === 204) return null;
-  return response.json();
+  const body = await response.text();
+  return body === '' ? null : JSON.parse(body);
 }
 function persistSession(data, epoch) {
   current(epoch);
